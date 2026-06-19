@@ -78,22 +78,14 @@ class VoiceboxClient:
             async with httpx.AsyncClient(timeout=self.timeout) as c:
                 r = await c.post(f"{self.base_url}/generate", json=payload)
                 r.raise_for_status()
+                generation_id = r.json()["id"]
+                audio_r = await c.get(f"{self.base_url}/audio/{generation_id}")
+                audio_r.raise_for_status()
         except httpx.HTTPError as e:
             raise VoiceboxError(f"generation failed: {e}") from e
 
-        content_type = r.headers.get("content-type", "audio/wav")
-        if "json" in content_type:
-            # Some builds return a JSON body with a path/base64 instead of bytes.
-            body = r.json()
-            if "audio_base64" in body:
-                import base64
-
-                return base64.b64decode(body["audio_base64"]), "audio/wav"
-            if "path" in body:
-                with open(body["path"], "rb") as f:
-                    return f.read(), "audio/wav"
-            raise VoiceboxError("unexpected JSON response from /generate")
-        return r.content, content_type
+        content_type = audio_r.headers.get("content-type", "audio/wav")
+        return audio_r.content, content_type
 
 
 voicebox = VoiceboxClient()
